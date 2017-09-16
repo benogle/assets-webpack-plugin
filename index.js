@@ -13,7 +13,8 @@ function AssetsWebpackPlugin (options) {
     filename: 'webpack-assets.json',
     prettyPrint: false,
     update: false,
-    fullPath: true
+    fullPath: true,
+    getName: (path) => path
   }, options)
   this.writer = createQueuedWriter(createOutputWriter(this.options))
 }
@@ -49,23 +50,33 @@ AssetsWebpackPlugin.prototype = {
             //     'index-bundle-42b6e1ec4fa8c5f0303e.js.map' ]
             // }
       var assetsByChunkName = stats.assetsByChunkName
+      var seenAssets = {}
 
-      var output = Object.keys(assetsByChunkName).reduce(function (chunkMap, chunkName) {
-        var assets = assetsByChunkName[chunkName]
+      var chunks = Object.keys(assetsByChunkName)
+      chunks.push('')  // push "empty" chunk
+      var output = chunks.reduce(function (chunkMap, chunkName) {
+        var assets = chunkName ? assetsByChunkName[chunkName] : stats.assets
         if (!Array.isArray(assets)) {
           assets = [assets]
         }
-        chunkMap[chunkName] = assets.reduce(function (typeMap, asset) {
-          if (isHMRUpdate(options, asset) || isSourceMap(options, asset)) {
+        var added = false
+        var typeMap = assets.reduce(function (typeMap, obj) {
+          var asset = obj.name || obj
+          if (isHMRUpdate(options, asset) || isSourceMap(options, asset) || !chunkName && seenAssets[asset]) {
             return typeMap
           }
 
-          var typeName = getAssetKind(options, asset)
-          typeMap[typeName] = assetPath + asset
+          var name = self.options.getName(asset)
+          typeMap[name] = assetPath + asset
 
+          added = true
+          seenAssets[asset] = true;
           return typeMap
         }, {})
 
+        if (added) {
+          merge(chunkMap, typeMap)
+        }
         return chunkMap
       }, {})
 
